@@ -81,6 +81,7 @@ set(ORDER_LIST
     "extended_dynamic_state2"
     "logic_op_dynamic_state"
     "fragment_shader_barycentric"
+    "gpu_dispatch"
 
     #Performance Samples
     "swapchain_images"
@@ -118,7 +119,7 @@ set(ORDER_LIST
 	"hpp_terrain_tessellation"
 	"hpp_texture_loading"
 	"hpp_texture_mipmap_generation"
-	
+
     #HPP Performance Samples
     "hpp_pipeline_cache"
     "hpp_swapchain_images")

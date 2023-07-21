@@ -323,6 +323,16 @@ void Platform::set_arguments(const std::vector<std::string> &args)
 	arguments = args;
 }
 
+const std::vector<std::string>& Platform::get_generic_options() const
+{
+	return generic_options;
+}
+
+void Platform::set_generic_options(const std::vector<std::string>& options)
+{
+	generic_options = options;
+}
+
 void Platform::set_external_storage_directory(const std::string &dir)
 {
 	external_storage_directory = dir;

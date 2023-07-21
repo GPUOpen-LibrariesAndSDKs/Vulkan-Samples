@@ -1,0 +1,172 @@
+//  Copyright (c) 2023 Advanced Micro Devices, Inc. All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
+
+#version 450
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "shaderEnqueueSpirvIntrinsics.glsl.h"
+
+#define TILE_SIZE      16
+
+#include "common.glsl.h"
+
+layout(constant_id = 0) const int   ViewWidth = 1;
+layout(constant_id = 1) const int   ViewHeight = 1;
+layout(constant_id = 2) const uint  NumMaterials = 0;
+layout(constant_id = 3) const uint  NumTexturesPerMaterial = 0;
+layout(constant_id = 4) const uint  ShaderPermutation = 0;
+layout(constant_id = 5) const float AluComplexity = 0;
+
+#define BACKGROUND_BIT 0
+#define MODEL_BIT_BASE 1
+
+const uint BackgroundMask = (1u << BACKGROUND_BIT);
+const uint ModelMask      = ((1u << NumMaterials) - 1) << MODEL_BIT_BASE;
+
+layout(local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
+
+struct InputPayload
+{
+#ifdef NODE_DYNAMIC_EXPANSION
+	uvec3   grid_size;
+#endif
+	u16vec2 coord;		// tile or pixel coordinates
+};
+
+#ifdef NODE_AGGREGATION
+DeclareCoalescingAMDX();
+DeclareBuiltInCoalescedInputCountAMDX(inputPayloadCount);
+DeclareInputPayloadArrayAMD(InputPayload, in_payload, TILE_SIZE * TILE_SIZE);
+#else
+#ifdef NODE_DYNAMIC_EXPANSION
+DeclareMaxNumWorkgroupsAMDX(1, 1, 1);
+#else
+DeclareStaticNumWorkgroupsAMDX(1, 1, 1);
+#endif
+DeclareInputPayloadAMD(InputPayload, in_payload);
+#endif
+
+
+// All shaders must use the same resource bindings (it's the same pipeline)
+
+layout (set = 0, binding = 0) uniform UBO
+{
+	UboData ubo;
+};
+
+layout (set = 0, binding = 1, rgba8) uniform writeonly image2D outImage;
+layout (set = 0, binding = 2) uniform usampler2D inMaterial;
+layout (set = 0, binding = 3) uniform sampler2D inNormal;
+layout (set = 0, binding = 4) uniform sampler2D inTexCoord;
+layout (set = 0, binding = 5) uniform sampler2D inDepth;
+layout (set = 0, binding = 6) uniform sampler2D inTextureArray[];
+
+vec3 mixTextureColor(vec3 color, uint material, ivec2 coord)
+{
+	uint baseIndex = material * NumTexturesPerMaterial;
+	vec2 texCoord = texelFetch(inTexCoord, coord, 0).st;
+	vec4 texColor = vec4(0);
+
+#ifdef USE_TEXTURE_ARRAY
+	for (uint i = 0; i < NumTexturesPerMaterial; ++i)
+	{
+		texColor += textureLod(inTextureArray[nonuniformEXT(baseIndex + i)], texCoord, 0);
+	}
+#endif
+
+	return mix(color, texColor.rgb / float(NumTexturesPerMaterial), 0.2);
+}
+
+void main()
+{
+#ifdef NODE_AGGREGATION
+	if (gl_LocalInvocationIndex < inputPayloadCount)
+#endif
+	{
+#ifdef NODE_AGGREGATION
+		const ivec2 coord = ivec2(in_payload[gl_LocalInvocationIndex].coord);
+#else
+		const ivec2 coord = ivec2(TILE_SIZE * in_payload.coord + gl_LocalInvocationID.xy);
+#endif
+		const ivec2 viewSize = ivec2(ViewWidth, ViewHeight);
+
+		vec3  finalColor;
+
+		// Background only
+		if (ShaderPermutation == BackgroundMask)
+		{
+			finalColor = calculateBackgroundColor(ubo, coord, viewSize, AluComplexity);
+		}
+		// No background, model only
+		else if (((ShaderPermutation & BackgroundMask) == 0) &&
+				((ShaderPermutation & ModelMask)      != 0))
+		{
+			float depth  = texelFetch(inDepth, coord, 0).r;
+			uint  material = texelFetch(inMaterial, coord, 0).r;
+			vec3  albedo = getPaletteColor(material).rgb;
+			vec3  normal = normalize(2.0 * texelFetch(inNormal, coord, 0).rgb - 1.0);
+
+			finalColor = calculateModelColor(ubo, albedo, normal, coord, depth, viewSize, AluComplexity);
+
+			if (NumTexturesPerMaterial != 0)
+			{
+				finalColor = mixTextureColor(finalColor, material, coord);
+			}
+		}
+		// Background and model
+		else if ((ShaderPermutation & (ModelMask | BackgroundMask)) != 0)
+		{
+			float depth = texelFetch(inDepth, coord, 0).r;
+
+			if (depth > 0.0) {
+				uint material = texelFetch(inMaterial, coord, 0).r;
+				vec3 albedo = getPaletteColor(material).rgb;
+				vec3 normal = normalize(2.0 * texelFetch(inNormal, coord, 0).rgb - 1.0);
+
+				finalColor = calculateModelColor(ubo, albedo, normal, coord, depth, viewSize, AluComplexity);
+
+				if (NumTexturesPerMaterial != 0)
+				{
+					finalColor = mixTextureColor(finalColor, material, coord);
+				}
+			}
+			else
+			{
+				finalColor = calculateBackgroundColor(ubo, coord, viewSize, AluComplexity);
+			}
+		}
+		else
+		{
+			// Output red if the permutation is not handled.
+			finalColor = vec3(1, 0 , 0);
+		}
+
+		// Visual feedback for a specialized shader
+		if ((ubo.highlightedShaderPermutation != 0) && (ShaderPermutation == ubo.highlightedShaderPermutation))
+		{
+			finalColor.g = 1.0;
+		}
+
+		imageStore(outImage, coord, vec4(toSrgb(finalColor), 1.0));
+	}
+}

@@ -1,0 +1,149 @@
+//  Copyright (c) 2023 Advanced Micro Devices, Inc. All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
+
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+
+#define TILE_SIZE      16
+
+#include "shaderEnqueueSpirvIntrinsics.glsl.h"
+
+#include "common.glsl.h"
+
+layout(constant_id = 0) const int   ViewWidth = 1;
+layout(constant_id = 1) const int   ViewHeight = 1;
+layout(constant_id = 2) const uint  NumMaterials = 0;
+layout(constant_id = 3) const uint  NumTexturesPerMaterial = 0;
+layout(constant_id = 4) const uint  ShaderPermutation = 0;
+layout(constant_id = 5) const float AluComplexity = 0;
+
+layout(local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
+
+struct InputPayload
+{
+#ifdef NODE_DYNAMIC_EXPANSION
+	uvec3   grid_size;
+#endif
+	u16vec2 coord;	// tile or pixel coordinates
+};
+
+#ifdef NODE_AGGREGATION
+DeclareCoalescingAMDX();
+DeclareBuiltInCoalescedInputCountAMDX(inputPayloadCount);
+DeclareInputPayloadArrayAMD(InputPayload, in_payload, TILE_SIZE * TILE_SIZE);
+#else
+#ifdef NODE_DYNAMIC_EXPANSION
+DeclareMaxNumWorkgroupsAMDX(1, 1, 1);
+#else
+DeclareStaticNumWorkgroupsAMDX(1, 1, 1);
+#endif
+DeclareInputPayloadAMD(InputPayload, in_payload);
+#endif
+
+// All shaders must use the same resource bindings (it's the same pipeline)
+
+layout (set = 0, binding = 0) uniform UBO
+{
+	UboData ubo;
+};
+
+layout (set = 0, binding = 1, rgba8) uniform writeonly image2D outImage;
+layout (set = 0, binding = 2) uniform usampler2D inMaterial;
+
+void main()
+{
+#ifdef NODE_AGGREGATION
+	if (gl_LocalInvocationIndex < inputPayloadCount)
+#endif
+	{
+#ifdef NODE_AGGREGATION
+		const ivec2 coord = ivec2(in_payload[gl_LocalInvocationIndex].coord);
+#else
+		const ivec2 coord = ivec2(TILE_SIZE * in_payload.coord + gl_LocalInvocationID.xy);
+#endif
+
+		// Display the original material map (albeit with different color palette).
+		const uint material = texelFetch(inMaterial, coord, 0).r;
+		vec3  finalColor = getMaterialColor(material).rgb;
+
+		// Active branches -- should be compiled out if not needed based on the specialization constant.
+		if (ShaderPermutation < 256u)
+		{
+			const float complexity = AluComplexity / 8.0;
+			float noise = 0.0;
+
+			if ((ShaderPermutation & 1u) != 0)		// bit 0
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.1), complexity));
+			}
+			if ((ShaderPermutation & 2u) != 0)		// bit 1
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.12), complexity));
+			}
+			if ((ShaderPermutation & 4u) != 0)		// bit 2
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.45), complexity));
+			}
+			if ((ShaderPermutation & 8u) != 0)		// bit 3
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.75), complexity));
+			}
+			if ((ShaderPermutation & 16u) != 0)		// bit 4
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.98), complexity));
+			}
+			if ((ShaderPermutation & 32u) != 0)		// bit 5
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.27), complexity));
+			}
+			if ((ShaderPermutation & 64u) != 0)		// bit 6
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.63), complexity));
+			}
+			if ((ShaderPermutation & 128u) != 0)	// bit 7
+			{
+				noise += abs(iterateNoise(vec3(coord, 0.32), complexity));
+			}
+
+			finalColor *= 0.95 + 0.05 * abs(sin(noise));
+
+			// Visual feedback for a specialized shader
+			if (ShaderPermutation == ubo.highlightedShaderPermutation)
+			{
+				finalColor.g = 1.0;
+			}
+		}
+		else
+		{
+			// ERROR, we're handling only up to 256 permutations
+			finalColor = vec3(1, 0, 0);
+		}
+
+		// Visual feedback for a specialized shader
+		if (ShaderPermutation == ubo.highlightedShaderPermutation)
+		{
+			finalColor.g = 1.0;
+		}
+
+		imageStore(outImage, coord, vec4(toSrgb(finalColor), 1.0));
+	}
+}

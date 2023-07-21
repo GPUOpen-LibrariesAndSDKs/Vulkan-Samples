@@ -19,6 +19,7 @@
 #include "vk_common.h"
 
 #include <spdlog/fmt/fmt.h>
+#include <StandAlone/DirStackFileIncluder.h>
 
 #include "glsl_compiler.h"
 #include "platform/filesystem.h"
@@ -358,6 +359,11 @@ int32_t get_bits_per_pixel(VkFormat format)
 
 VkShaderModule load_shader(const std::string &filename, VkDevice device, VkShaderStageFlagBits stage)
 {
+	return load_shader(filename, device, stage, {});
+}
+
+VkShaderModule load_shader(const std::string &filename, VkDevice device, VkShaderStageFlagBits stage, const ShaderVariant& variant)
+{
 	vkb::GLSLCompiler glsl_compiler;
 
 	auto buffer = vkb::fs::read_shader_binary(filename);
@@ -370,8 +376,24 @@ VkShaderModule load_shader(const std::string &filename, VkDevice device, VkShade
 	std::vector<uint32_t> spirv;
 	std::string           info_log;
 
+	std::string path;
+	{
+		auto pos = filename.find_last_of("/");
+		if (pos != std::string::npos)
+		{
+			path = filename.substr(0, pos);
+			path = "shaders/" + path;
+		}
+	}
+
+	DirStackFileIncluder includer;
+	if (!path.empty())
+	{
+		includer.pushExternalLocalDirectory(path);
+	}
+
 	// Compile the GLSL source
-	if (!glsl_compiler.compile_to_spirv(vkb::find_shader_stage(file_ext), buffer, "main", {}, spirv, info_log))
+	if (!glsl_compiler.compile_to_spirv(vkb::find_shader_stage(file_ext), buffer, "main", variant, spirv, info_log, includer))
 	{
 		LOGE("Failed to compile shader, Error: {}", info_log.c_str());
 		return VK_NULL_HANDLE;

@@ -17,6 +17,20 @@
 -
 -->
 
+# Vulkan GPU Work Graphs sample <!-- omit in toc -->
+
+This branch adds a sample application for `VK_AMDX_shader_enqueue` extension that provides
+access to GPU Work Graphs feature on Radeon&trade; RX 7000 series graphics cards.
+
+To build the sample, follow the standard build instructions.
+
+To run the sample, execute with the arguments `sample gpu_dispatch`.
+See more details and command line options in the [readme](./samples/extensions/gpu_dispatch/README.md).
+
+Navigate to the following paths to learn more:
+- [source code](./samples/extensions/gpu_dispatch)
+- [shaders](./shaders/gpu_dispatch)
+
 # Vulkan Samples <!-- omit in toc -->
 
 ![Vulkan Samples banner](banner.jpg)
@@ -72,7 +86,7 @@ Additionally you may find the following links useful:
   - [Controls](./docs/misc.md#controls)
   - [Debug window](./docs/misc.md#debug-window)
   - [Create a Sample](./docs/create_sample.md)
-- **Vulkan Essentials**  
+- **Vulkan Essentials**
   - [How does Vulkan compare to OpenGL ES? What should you expect when targeting Vulkan?](./samples/vulkan_basics.md)
 - **Misc**
   - [Driver version](./docs/misc.md#driver-version)

@@ -1,0 +1,140 @@
+//  Copyright (c) 2023 Advanced Micro Devices, Inc. All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
+
+#version 450
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "shaderEnqueueSpirvIntrinsics.glsl.h"
+
+#define TILE_SIZE 			16
+#ifdef NODE_AGGREGATION
+#define MAX_ALLOCATIONS 	256	// TILE_SIZE*TILE_SIZE
+#else
+#define MAX_ALLOCATIONS 	1	// 1 payload per tile
+#endif
+
+layout(local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
+
+struct OutputPayload
+{
+#ifdef NODE_DYNAMIC_EXPANSION
+	uvec3   grid_size;
+#endif
+	u16vec2 coord;		// tile or pixel coordinates
+};
+
+DeclareMaxNumWorkgroupsAMDX(512, 512, 1);	// Up to 8k-by-8k resolution
+DeclareOutputPayloadAMD("compose", InitializePayloads, FinalizePayloads, OutputPayload, out_payload, MAX_ALLOCATIONS);
+
+// All shaders must use the same resource bindings (it's the same pipeline)
+
+layout (set = 0, binding = 2) uniform usampler2D inMaterial;
+layout (set = 0, binding = 5) uniform sampler2D  inDepth;
+
+layout(constant_id = 2) const uint NumMaterials = 0;
+
+#define BACKGROUND_BIT 0
+#define MODEL_BIT_BASE 1
+
+// Index 0 is the background. Index 1 and higher are consecutive model materials.
+shared uint sharedShaderBits[NumMaterials + 1];
+
+void main()
+{
+	const ivec2 coord = ivec2(TILE_SIZE * gl_WorkGroupID.xy + gl_LocalInvocationID.xy);
+	const float depth = texelFetch(inDepth, coord, 0).r;
+
+#ifdef NODE_AGGREGATION
+	uint shaderIndex;
+
+	if (depth == 0.0)
+	{
+		shaderIndex = 1 << BACKGROUND_BIT;
+	}
+	else
+	{
+		uint material    = texelFetch(inMaterial, coord, 0).r;		// zero-based material index
+		uint materialBit = material + MODEL_BIT_BASE;
+
+		shaderIndex = 1 << materialBit;
+	}
+	shaderIndex -= 1;	// background only is shader index 0
+
+	const uint recordCount  = 1;		// one record per invocation
+
+	InitializePayloads(out_payload, ScopeInvocation, recordCount, shaderIndex);
+
+	out_payload[0].coord = u16vec2(coord);
+
+	FinalizePayloads(out_payload);
+
+#else // not NODE_AGGREGATION
+
+	if (gl_LocalInvocationIndex == 0)
+	{
+		for (int i = 0; i < sharedShaderBits.length(); ++i)
+		{
+			sharedShaderBits[i] = 0;
+		}
+	}
+
+	memoryBarrierShared();
+	barrier();
+
+	if (depth == 0.0)
+	{
+		sharedShaderBits[BACKGROUND_BIT] = 1 << BACKGROUND_BIT;
+	}
+	else
+	{
+		uint material    = texelFetch(inMaterial, coord, 0).r;		// zero-based material index
+		uint materialBit = material + MODEL_BIT_BASE;
+
+		sharedShaderBits[materialBit] = 1 << materialBit;
+	}
+
+	memoryBarrierShared();
+	barrier();
+
+	uint shaderIndex = 0;
+	for (int i = 0; i < sharedShaderBits.length(); ++i)
+	{
+		shaderIndex += sharedShaderBits[i];
+	}
+	shaderIndex -= 1;	// background only is shader index 0
+
+	const uint recordCount     = 1;		// only one payload
+
+	InitializePayloads(out_payload, ScopeWorkgroup, recordCount, shaderIndex);
+
+	if (gl_LocalInvocationIndex == 0)
+	{
+#ifdef NODE_DYNAMIC_EXPANSION
+		out_payload[0].grid_size = uvec3(1, 1, 1);
+#endif
+		out_payload[0].coord = u16vec2(gl_WorkGroupID);	// z is discarded
+	}
+
+	FinalizePayloads(out_payload);
+
+#endif // not NODE_AGGREGATION
+}

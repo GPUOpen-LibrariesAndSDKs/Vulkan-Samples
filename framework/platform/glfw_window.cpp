@@ -57,7 +57,23 @@ void window_focus_callback(GLFWwindow *window, int focused)
 {
 	if (auto platform = reinterpret_cast<Platform *>(glfwGetWindowUserPointer(window)))
 	{
-		platform->set_focus(focused);
+		// Ignore the loss of focus for gpu_dispatch app, so that it can continue rendering in the background
+		if ((platform->get_app().get_name() != "gpu_dispatch") || (focused == GLFW_TRUE))
+		{
+			platform->set_focus(focused);
+		}
+	}
+}
+
+void window_iconify_callback(GLFWwindow *window, int iconified)
+{
+	// This is to workaround the change above for gpu_dispatch app, disable focus only if minimized.
+	if (iconified == GLFW_TRUE)
+	{
+		if (auto platform = reinterpret_cast<Platform *>(glfwGetWindowUserPointer(window)))
+		{
+			platform->set_focus(false);
+		}
 	}
 }
 
@@ -319,6 +335,7 @@ GlfwWindow::GlfwWindow(Platform *platform, const Window::Properties &properties)
 	glfwSetWindowCloseCallback(handle, window_close_callback);
 	glfwSetWindowSizeCallback(handle, window_size_callback);
 	glfwSetWindowFocusCallback(handle, window_focus_callback);
+	glfwSetWindowIconifyCallback(handle, window_iconify_callback);
 	glfwSetKeyCallback(handle, key_callback);
 	glfwSetCursorPosCallback(handle, cursor_position_callback);
 	glfwSetMouseButtonCallback(handle, mouse_button_callback);

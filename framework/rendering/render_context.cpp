@@ -73,6 +73,7 @@ void RenderContext::prepare(size_t thread_count, RenderTarget::CreateFunc create
 	{
 		swapchain->set_present_mode_priority(present_mode_priority_list);
 		swapchain->set_surface_format_priority(surface_format_priority_list);
+		swapchain->get_properties().old_swapchain = swapchain->get_handle();
 		swapchain->create();
 
 		surface_extent = swapchain->get_extent();

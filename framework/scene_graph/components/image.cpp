@@ -148,10 +148,10 @@ static VkFormat maybe_coerce_to_srgb(VkFormat fmt)
 	}
 }
 
-Image::Image(const std::string &name, std::vector<uint8_t> &&d, std::vector<Mipmap> &&m) :
+Image::Image(const std::string &name, std::vector<uint8_t> &&d, std::vector<Mipmap> &&m, VkFormat format) :
     Component{name},
     data{std::move(d)},
-    format{VK_FORMAT_R8G8B8A8_UNORM},
+    format{format},
     mipmaps{std::move(m)}
 {
 }

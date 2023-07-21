@@ -88,6 +88,8 @@ class Buffer : public VulkanResource<VkBuffer, VK_OBJECT_TYPE_BUFFER, const Devi
 
 	VkDeviceMemory get_memory() const;
 
+    VkDeviceAddress get_device_address() const;
+
 	/**
 	 * @brief Flushes memory if it is HOST_VISIBLE and not HOST_COHERENT
 	 */

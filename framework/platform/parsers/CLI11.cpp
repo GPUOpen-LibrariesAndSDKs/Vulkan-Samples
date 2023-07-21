@@ -106,8 +106,11 @@ void CLI11CommandParser::parse(CLI11CommandContext *context, FlagCommand *comman
 			flag = context->cli11->add_flag(command->get_name(), command->get_help_line());
 			break;
 		case FlagType::OneValue:
+			flag = context->cli11->add_option(command->get_name(), command->get_help_line());
+			break;
 		case FlagType::ManyValues:
 			flag = context->cli11->add_option(command->get_name(), command->get_help_line());
+			flag->expected(CLI::detail::expected_max_vector_size);
 			break;
 	}
 

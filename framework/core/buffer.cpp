@@ -112,6 +112,18 @@ VkDeviceSize Buffer::get_size() const
 	return size;
 }
 
+VkDeviceAddress Buffer::get_device_address() const
+{
+    assert(handle != VK_NULL_HANDLE);
+
+    VkBufferDeviceAddressInfo buffer_address_info = {};
+    buffer_address_info.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    buffer_address_info.pNext  = nullptr;
+    buffer_address_info.buffer = handle;
+
+    return vkGetBufferDeviceAddressKHR(device->get_handle(), &buffer_address_info);
+}
+
 uint8_t *Buffer::map()
 {
 	if (!mapped && !mapped_data)

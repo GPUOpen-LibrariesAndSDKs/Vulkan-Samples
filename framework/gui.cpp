@@ -270,6 +270,7 @@ void Gui::prepare(const VkPipelineCache pipeline_cache, const VkRenderPass rende
 	std::vector<VkDescriptorPoolSize> pool_sizes = {
 	    vkb::initializers::descriptor_pool_size(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)};
 	VkDescriptorPoolCreateInfo descriptorPoolInfo = vkb::initializers::descriptor_pool_create_info(pool_sizes, 2);
+	vkDestroyDescriptorPool(sample.get_render_context().get_device().get_handle(), descriptor_pool, nullptr);
 	VK_CHECK(vkCreateDescriptorPool(sample.get_render_context().get_device().get_handle(), &descriptorPoolInfo, nullptr, &descriptor_pool));
 
 	// Descriptor set layout
@@ -277,6 +278,7 @@ void Gui::prepare(const VkPipelineCache pipeline_cache, const VkRenderPass rende
 	    vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
 	};
 	VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = vkb::initializers::descriptor_set_layout_create_info(layout_bindings);
+	vkDestroyDescriptorSetLayout(sample.get_render_context().get_device().get_handle(), descriptor_set_layout, nullptr);
 	VK_CHECK(vkCreateDescriptorSetLayout(sample.get_render_context().get_device().get_handle(), &descriptor_set_layout_create_info, nullptr, &descriptor_set_layout));
 
 	// Descriptor set
@@ -356,6 +358,7 @@ void Gui::prepare(const VkPipelineCache pipeline_cache, const VkRenderPass rende
 
 	pipeline_create_info.pVertexInputState = &vertex_input_state_create_info;
 
+	vkDestroyPipeline(sample.get_render_context().get_device().get_handle(), pipeline, nullptr);
 	VK_CHECK(vkCreateGraphicsPipelines(sample.get_render_context().get_device().get_handle(), pipeline_cache, 1, &pipeline_create_info, nullptr, &pipeline));
 }        // namespace vkb
 
@@ -406,6 +409,8 @@ bool Gui::update_buffers()
 		last_vertex_buffer_size = vertex_buffer_size;
 		updated                 = true;
 
+		sample.get_render_context().get_device().wait_idle();
+
 		vertex_buffer.reset();
 		vertex_buffer = std::make_unique<core::Buffer>(sample.get_render_context().get_device(), vertex_buffer_size,
 		                                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -417,6 +422,8 @@ bool Gui::update_buffers()
 	{
 		last_index_buffer_size = index_buffer_size;
 		updated                = true;
+
+		sample.get_render_context().get_device().wait_idle();
 
 		index_buffer.reset();
 		index_buffer = std::make_unique<core::Buffer>(sample.get_render_context().get_device(), index_buffer_size,

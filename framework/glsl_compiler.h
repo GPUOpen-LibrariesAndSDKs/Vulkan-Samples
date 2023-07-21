@@ -59,6 +59,7 @@ class GLSLCompiler
 	 * @param glsl_source The GLSL source code to be compiled
 	 * @param entry_point The entrypoint function name of the shader stage
 	 * @param shader_variant The shader variant
+	 * @param includer An includer implementation for #include directives in shaders
 	 * @param[out] spirv The generated SPIRV code
 	 * @param[out] info_log Stores any log messages during the compilation process
 	 */
@@ -68,5 +69,15 @@ class GLSLCompiler
 	                      const ShaderVariant &       shader_variant,
 	                      std::vector<std::uint32_t> &spirv,
 	                      std::string &               info_log);
+
+	/** An overload with an includer. */
+	bool compile_to_spirv(VkShaderStageFlagBits       stage,
+	                      const std::vector<uint8_t> &glsl_source,
+	                      const std::string &         entry_point,
+	                      const ShaderVariant &       shader_variant,
+	                      std::vector<std::uint32_t> &spirv,
+	                      std::string &               info_log,
+	                      glslang::TShader::Includer& includer);
+
 };
 }        // namespace vkb

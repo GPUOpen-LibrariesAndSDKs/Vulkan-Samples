@@ -142,6 +142,9 @@ class Platform
 
 	void on_post_draw(RenderContext &context);
 
+	const std::vector<std::string>& get_generic_options() const;
+	void set_generic_options(const std::vector<std::string>& options);
+
 	static const uint32_t MIN_WINDOW_WIDTH;
 	static const uint32_t MIN_WINDOW_HEIGHT;
 
@@ -156,11 +159,13 @@ class Platform
 
 	std::unique_ptr<Application> active_app{nullptr};
 
+	std::vector<std::string> generic_options;
+
 	virtual std::vector<spdlog::sink_ptr> get_platform_sinks();
 
 	/**
 	 * @brief Handles the creation of the window
-	 * 
+	 *
 	 * @param properties Preferred window configuration
 	 */
 	virtual void create_window(const Window::Properties &properties) = 0;
