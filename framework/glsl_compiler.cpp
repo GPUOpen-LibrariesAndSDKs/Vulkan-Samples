@@ -20,7 +20,7 @@
 VKBP_DISABLE_WARNINGS()
 #include <SPIRV/GLSL.std.450.h>
 #include <SPIRV/GlslangToSpv.h>
-#include <StandAlone/ResourceLimits.h>
+#include <glslang/Public/ResourceLimits.h>
 #include <glslang/Include/ShHandle.h>
 #include <glslang/OSDependent/osinclude.h>
 
@@ -148,7 +148,7 @@ bool GLSLCompiler::compile_to_spirv(VkShaderStageFlagBits       stage,
 		shader.setEnvTarget(GLSLCompiler::env_target_language, GLSLCompiler::env_target_language_version);
 	}
 
-	if (!shader.parse(&glslang::DefaultTBuiltInResource, 100, false, messages, includer))
+	if (!shader.parse(::GetDefaultResources(), 100, false, messages, includer))
 	{
 		info_log = std::string(shader.getInfoLog()) + "\n" + std::string(shader.getInfoDebugLog());
 		return false;
