@@ -20,10 +20,9 @@
 VKBP_DISABLE_WARNINGS()
 #include <SPIRV/GLSL.std.450.h>
 #include <SPIRV/GlslangToSpv.h>
-#include <glslang/Public/ResourceLimits.h>
+#include <StandAlone/ResourceLimits.h>
 #include <glslang/Include/ShHandle.h>
 #include <glslang/OSDependent/osinclude.h>
-
 VKBP_ENABLE_WARNINGS()
 
 namespace vkb
@@ -104,26 +103,6 @@ bool GLSLCompiler::compile_to_spirv(VkShaderStageFlagBits       stage,
                                     std::vector<std::uint32_t> &spirv,
                                     std::string                &info_log)
 {
-	glslang::TShader::ForbidIncluder includer;
-
-	return compile_to_spirv(
-		stage,
-		glsl_source,
-		entry_point,
-		shader_variant,
-		spirv,
-		info_log,
-		includer);
-}
-
-bool GLSLCompiler::compile_to_spirv(VkShaderStageFlagBits       stage,
-                                    const std::vector<uint8_t> &glsl_source,
-                                    const std::string          &entry_point,
-                                    const ShaderVariant        &shader_variant,
-                                    std::vector<std::uint32_t> &spirv,
-                                    std::string                &info_log,
-                                    glslang::TShader::Includer &includer)
-{
 	// Initialize glslang library.
 	glslang::InitializeProcess();
 
@@ -136,8 +115,6 @@ bool GLSLCompiler::compile_to_spirv(VkShaderStageFlagBits       stage,
 	const char *shader_source     = reinterpret_cast<const char *>(source.data());
 
 	glslang::TShader shader(language);
-	shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_2);
-	shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_3);
 	shader.setStringsWithLengthsAndNames(&shader_source, nullptr, file_name_list, 1);
 	shader.setEntryPoint(entry_point.c_str());
 	shader.setSourceEntryPoint(entry_point.c_str());
@@ -148,7 +125,7 @@ bool GLSLCompiler::compile_to_spirv(VkShaderStageFlagBits       stage,
 		shader.setEnvTarget(GLSLCompiler::env_target_language, GLSLCompiler::env_target_language_version);
 	}
 
-	if (!shader.parse(::GetDefaultResources(), 100, false, messages, includer))
+	if (!shader.parse(&glslang::DefaultTBuiltInResource, 100, false, messages))
 	{
 		info_log = std::string(shader.getInfoLog()) + "\n" + std::string(shader.getInfoDebugLog());
 		return false;

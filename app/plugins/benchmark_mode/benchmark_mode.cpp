@@ -1,4 +1,5 @@
 /* Copyright (c) 2020-2021, Arm Limited and Contributors
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -39,12 +40,16 @@ void BenchmarkMode::init(const vkb::CommandParser &parser)
 	// Whilst in benchmark mode fix the fps so that separate runs are consistently simulated
 	// This will effect the graph outputs of framerate
 	platform->force_simulation_fps(60.0f);
+	enabled = true;
 }
 
 void BenchmarkMode::on_update(float delta_time)
 {
-	elapsed_time += delta_time;
-	total_frames++;
+	if (enabled)
+	{
+		elapsed_time += delta_time;
+		total_frames++;
+	}
 }
 
 void BenchmarkMode::on_app_start(const std::string &app_id)
@@ -58,4 +63,10 @@ void BenchmarkMode::on_app_close(const std::string &app_id)
 {
 	LOGI("Benchmark for {} completed in {} seconds (ran {} frames, averaged {} fps)", app_id, elapsed_time, total_frames, total_frames / elapsed_time);
 }
+
+void BenchmarkMode::set_enabled(bool is_enabled)
+{
+	enabled = is_enabled;
+}
+
 }        // namespace plugins

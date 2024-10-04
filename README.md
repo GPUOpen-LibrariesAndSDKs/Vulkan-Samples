@@ -24,12 +24,19 @@ access to GPU Work Graphs feature on Radeon&trade; RX 7000 series graphics cards
 
 To build the sample, follow the standard build instructions.
 
-To run the sample, execute with the arguments `sample gpu_dispatch`.
+To run the compute sample, execute with the arguments `sample gpu_dispatch`.
 See more details and command line options in the [readme](./samples/extensions/gpu_dispatch/README.md).
 
+To run the mesh draw sample, execute with the arguments `sample gpu_draw_dispatch`.
+See more details and command line options in the [readme](./samples/extensions/gpu_draw_dispatch/README.md).
+
 Navigate to the following paths to learn more:
-- [source code](./samples/extensions/gpu_dispatch)
-- [shaders](./shaders/gpu_dispatch)
+- Source code
+  - [samples/extensions/gpu_dispatch](./samples/extensions/gpu_dispatch)
+  - [samples/extensions/gpu_draw_dispatch](./samples/extensions/gpu_draw_dispatch)
+- Shaders
+  - [shaders/gpu_dispatch](./shaders/gpu_dispatch)
+  - [shaders/gpu_draw_dispatch](./shaders/gpu_draw_dispatch)
 
 # Vulkan Samples <!-- omit in toc -->
 

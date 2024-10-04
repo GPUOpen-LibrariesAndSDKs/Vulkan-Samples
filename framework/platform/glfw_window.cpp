@@ -1,4 +1,5 @@
 /* Copyright (c) 2019-2022, Arm Limited and Contributors
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -57,8 +58,10 @@ void window_focus_callback(GLFWwindow *window, int focused)
 {
 	if (auto platform = reinterpret_cast<Platform *>(glfwGetWindowUserPointer(window)))
 	{
-		// Ignore the loss of focus for gpu_dispatch app, so that it can continue rendering in the background
-		if ((platform->get_app().get_name() != "gpu_dispatch") || (focused == GLFW_TRUE))
+		// Ignore the loss of focus for gpu_(draw_)dispatch app, so that it can continue rendering in the background
+		if (((platform->get_app().get_name() != "gpu_dispatch") &&
+			 (platform->get_app().get_name() != "gpu_draw_dispatch")) ||
+			(focused == GLFW_TRUE))
 		{
 			platform->set_focus(focused);
 		}

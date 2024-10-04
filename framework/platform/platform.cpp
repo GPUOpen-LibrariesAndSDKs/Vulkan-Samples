@@ -1,4 +1,5 @@
 /* Copyright (c) 2019-2023, Arm Limited and Contributors
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -347,6 +348,7 @@ std::vector<spdlog::sink_ptr> Platform::get_platform_sinks()
 {
 	std::vector<spdlog::sink_ptr> sinks;
 	sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+	sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("log.txt", true));
 	return sinks;
 }
 

@@ -1,4 +1,5 @@
 /* Copyright (c) 2019-2023, Sascha Willems
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -1270,11 +1271,11 @@ Texture ApiVulkanSample::load_texture_cubemap(const std::string &file, vkb::sg::
 	return texture;
 }
 
-std::unique_ptr<vkb::sg::SubMesh> ApiVulkanSample::load_model(const std::string &file, uint32_t index)
+std::unique_ptr<vkb::sg::SubMesh> ApiVulkanSample::load_model(const std::string &file, uint32_t index, bool mesh_shader_buffer)
 {
-	vkb::GLTFLoader loader{*device};
+	vkb::GLTFLoader loader{get_device()};
 
-	std::unique_ptr<vkb::sg::SubMesh> model = loader.read_model_from_file(file, index);
+	std::unique_ptr<vkb::sg::SubMesh> model = loader.read_model_from_file(file, index, mesh_shader_buffer);
 
 	if (!model)
 	{

@@ -40,7 +40,6 @@ using BindingMap = std::map<uint32_t, std::map<uint32_t, T>>;
 
 namespace vkb
 {
-class ShaderVariant;
 /**
  * @brief Helper function to determine if a Vulkan format is depth only.
  * @param format Vulkan format to check.
@@ -96,12 +95,8 @@ int32_t get_bits_per_pixel(VkFormat format);
  * @param filename The shader location
  * @param device The logical device
  * @param stage The shader stage
- * @param variant The shader variant to set preprocessor defines
  * @return The string to return.
  */
-VkShaderModule load_shader(const std::string &filename, VkDevice device, VkShaderStageFlagBits stage, const ShaderVariant& variant);
-
-/** A load_shader with an empty variant. */
 VkShaderModule load_shader(const std::string &filename, VkDevice device, VkShaderStageFlagBits stage);
 
 /**

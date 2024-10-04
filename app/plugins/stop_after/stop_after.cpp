@@ -1,4 +1,5 @@
 /* Copyright (c) 2020-2021, Arm Limited and Contributors
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -22,27 +23,45 @@ namespace plugins
 StopAfter::StopAfter() :
     StopAfterTags("Stop After X",
                   "A collection of flags to stop the running application after a set period.",
-                  {vkb::Hook::OnUpdate}, {&stop_after_frame_flag})
+                  {vkb::Hook::OnUpdate},
+                  {&stop_after_frame_flag, &stop_after_seconds_flag})
 {
 }
 
 bool StopAfter::is_active(const vkb::CommandParser &parser)
 {
-	return parser.contains(&stop_after_frame_flag);
+	return parser.contains(&stop_after_frame_flag) || parser.contains(&stop_after_seconds_flag);
 }
 
 void StopAfter::init(const vkb::CommandParser &parser)
 {
+	enabled = true;
+
 	remaining_frames = parser.as<uint32_t>(&stop_after_frame_flag);
+	use_frames = (remaining_frames > 0);
+
+	remaining_time = parser.as<float>(&stop_after_seconds_flag);
+	use_time = (remaining_time > 0.0f);
 }
 
 void StopAfter::on_update(float delta_time)
 {
-	remaining_frames--;
-
-	if (remaining_frames <= 0)
+	if (enabled)
 	{
-		platform->close();
+		remaining_frames--;
+		remaining_time -= delta_time;
+
+		if ((use_frames && (remaining_frames <= 0)) ||
+			(use_time && (remaining_time <= 0.0f)))
+		{
+			platform->close();
+		}
 	}
 }
+
+void StopAfter::set_enabled(bool is_enabled)
+{
+	enabled = is_enabled;
+}
+
 }        // namespace plugins

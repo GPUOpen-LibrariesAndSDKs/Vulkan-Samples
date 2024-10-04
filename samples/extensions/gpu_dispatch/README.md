@@ -14,9 +14,6 @@ NOTE: Not all combinations of options are compatible, and some may significantly
 
 Available options:
 
-    hlsl                    instead of using GLSL shaders (compiled on-line), use the precompiled
-                            HLSL shaders (they can be recompiled with a batch script)
-
     scene_teapot            the default scene with a teapot model
     scene_monkeys           a scene with multiple Blender monkey heads
     scene_material_1        a static scene based on a captured material id map
@@ -49,9 +46,10 @@ The following options are not supported in the "sanity" scene:
     materials_8             8 materials is 511 shaders
     materials_9             9 materials is 1023 shaders
 
-    graph_fixed_exp         fixed expansion nodes tile classification
-    graph_dynamic_exp       just to test the dynamic code path, same logic as fixed expansion
-    graph_aggregation       per-pixel classification with aggregation node
+    graph_fixed_exp         fixed expansion (broadcast) nodes tile classification
+    graph_dynamic_exp       dynamic expansion (broadcast) nodes tile classification
+    graph_aggregation       per-pixel classification with aggregation (coalescing) node
+    graph_thread            per-pixel classification with thread node
 
 
 The following options apply to "monkeys" scene:

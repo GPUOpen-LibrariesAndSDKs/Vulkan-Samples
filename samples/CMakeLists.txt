@@ -82,6 +82,7 @@ set(ORDER_LIST
     "logic_op_dynamic_state"
     "fragment_shader_barycentric"
     "gpu_dispatch"
+    "gpu_draw_dispatch"
 
     #Performance Samples
     "swapchain_images"

@@ -1,4 +1,5 @@
 /* Copyright (c) 2020-2021, Arm Limited and Contributors
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -27,11 +28,11 @@ using BenchmarkModeTags = vkb::PluginBase<BenchmarkMode, vkb::tags::Passive>;
 
 /**
  * @brief Benchmark Mode
- * 
+ *
  * When enabled frame time statistics of a samples run will be printed to the console when an application closes. The simulation frame time (delta time) is also locked to 60FPS so that statistics can be compared more accurately across different devices.
- * 
+ *
  * Usage: vulkan_samples sample afbc --benchmark
- * 
+ *
  */
 class BenchmarkMode : public BenchmarkModeTags
 {
@@ -50,9 +51,13 @@ class BenchmarkMode : public BenchmarkModeTags
 
 	virtual void on_app_close(const std::string &app_info) override;
 
+	void set_enabled(bool is_enabled);
+
 	vkb::FlagCommand benchmark_flag = {vkb::FlagType::FlagOnly, "benchmark", "", "Enable benchmark mode"};
 
   private:
+	bool enabled{false};
+
 	uint32_t total_frames{0};
 
 	float elapsed_time{0.0f};

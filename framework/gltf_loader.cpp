@@ -1,5 +1,6 @@
 /* Copyright (c) 2018-2023, Arm Limited and Contributors
  * Copyright (c) 2019-2023, Sascha Willems
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -334,6 +335,66 @@ inline void upload_image_to_gpu(CommandBuffer &command_buffer, core::Buffer &sta
 	}
 }
 
+std::vector<Meshlet> prepare_meshlets(const std::unique_ptr<vkb::sg::SubMesh> &submesh, const std::vector<unsigned char> &index_data)
+{
+	std::vector<Meshlet> all_meshlets;
+
+	Meshlet meshlet {};
+	meshlet.unique_index_count = 0;
+	meshlet.primitive_index_count  = 0;
+
+	std::map<uint32_t, uint32_t> vertices_indices;
+
+	uint32_t triangle_check = 0; // each meshlet needs to contain full primitives
+
+	for (uint32_t i = 0; i < submesh->vertex_indices; i++)
+	{
+		uint32_t index = *(reinterpret_cast<const uint32_t *>(index_data.data()) + i);
+
+		std::map<uint32_t, uint32_t>::iterator it = vertices_indices.find(index);
+
+		if (it != vertices_indices.end())
+		{
+			meshlet.primitive_indices[meshlet.primitive_index_count] = (*it).second;
+		}
+		else
+		{
+			vertices_indices.insert(std::make_pair(index, meshlet.unique_index_count));
+			meshlet.primitive_indices[meshlet.primitive_index_count] = meshlet.unique_index_count;
+			meshlet.unique_indices[meshlet.unique_index_count] = index;
+			++meshlet.unique_index_count;
+		}
+
+		meshlet.primitive_index_count++;
+		triangle_check = triangle_check < 3 ? ++triangle_check : 1;
+
+		if ((meshlet.unique_index_count == 64) || (meshlet.primitive_index_count == 126 * 3) || (i == submesh->vertex_indices - 1))
+		{
+			if (i == submesh->vertex_indices - 1)
+			{
+				assert(triangle_check == 3);
+			}
+
+			uint32_t counter = 0;
+
+			if (triangle_check != 3)
+			{
+				meshlet.primitive_index_count -= triangle_check;
+				i -= triangle_check;
+				triangle_check = 0;
+			}
+
+			all_meshlets.push_back(meshlet);
+
+			meshlet.unique_index_count = 0;
+			meshlet.primitive_index_count  = 0;
+			vertices_indices.clear();
+		}
+	}
+
+	return all_meshlets;
+}
+
 static inline bool texture_needs_srgb_colorspace(const std::string &name)
 {
 	// The gltf spec states that the base and emissive textures MUST be encoded with the sRGB
@@ -400,7 +461,7 @@ std::unique_ptr<sg::Scene> GLTFLoader::read_scene_from_file(const std::string &f
 	return std::make_unique<sg::Scene>(load_scene(scene_index));
 }
 
-std::unique_ptr<sg::SubMesh> GLTFLoader::read_model_from_file(const std::string &file_name, uint32_t index)
+std::unique_ptr<sg::SubMesh> GLTFLoader::read_model_from_file(const std::string &file_name, uint32_t index, bool add_flat_vertices, bool mesh_shader_buffer)
 {
 	std::string err;
 	std::string warn;
@@ -439,7 +500,7 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::read_model_from_file(const std::string 
 		model_path.clear();
 	}
 
-	return std::move(load_model(index));
+	return std::move(load_model(index, add_flat_vertices, mesh_shader_buffer));
 }
 
 sg::Scene GLTFLoader::load_scene(int scene_index)
@@ -734,7 +795,7 @@ sg::Scene GLTFLoader::load_scene(int scene_index)
 
 				submesh->index_buffer = std::make_unique<core::Buffer>(device,
 				                                                       index_data.size(),
-				                                                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+				                                                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 				                                                       VMA_MEMORY_USAGE_GPU_TO_CPU);
 				submesh->index_buffer->set_debug_name(fmt::format("'{}' mesh, primitive #{}: index buffer",
 				                                                  gltf_mesh.name, i_primitive));
@@ -1025,7 +1086,7 @@ sg::Scene GLTFLoader::load_scene(int scene_index)
 	return scene;
 }
 
-std::unique_ptr<sg::SubMesh> GLTFLoader::load_model(uint32_t index)
+std::unique_ptr<sg::SubMesh> GLTFLoader::load_model(uint32_t index, bool add_flat_vertices, bool mesh_shader_buffer)
 {
 	auto submesh = std::make_unique<sg::SubMesh>();
 
@@ -1044,6 +1105,8 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::load_model(uint32_t index)
 	auto &gltf_primitive = gltf_mesh.primitives[0];
 
 	std::vector<Vertex> vertex_data;
+	std::vector<Vertex> flat_vertex_data;
+	std::vector<AlignedVertex> aligned_vertex_data;
 
 	const float    *pos     = nullptr;
 	const float    *normals = nullptr;
@@ -1089,36 +1152,71 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::load_model(uint32_t index)
 
 	bool has_skin = (joints && weights);
 
-	for (size_t v = 0; v < vertex_count; v++)
+	if (mesh_shader_buffer)
 	{
-		Vertex vert{};
-		vert.pos    = glm::vec4(glm::make_vec3(&pos[v * 3]), 1.0f);
-		vert.normal = glm::normalize(glm::vec3(normals ? glm::make_vec3(&normals[v * 3]) : glm::vec3(0.0f)));
-		vert.uv     = uvs ? glm::make_vec2(&uvs[v * 2]) : glm::vec3(0.0f);
+		for (size_t v = 0; v < vertex_count; v++)
+		{
+			AlignedVertex vert {};
+			vert.pos    = glm::vec4(glm::make_vec3(&pos[v * 3]), 1.0f);
+			vert.normal = normals ? glm::vec4(glm::normalize(glm::make_vec3(&normals[v * 3])), 0.0f) : glm::vec4(0.0f);
+			aligned_vertex_data.push_back(vert);
+		}
 
-		vert.joint0  = has_skin ? glm::vec4(glm::make_vec4(&joints[v * 4])) : glm::vec4(0.0f);
-		vert.weight0 = has_skin ? glm::make_vec4(&weights[v * 4]) : glm::vec4(0.0f);
-		vertex_data.push_back(vert);
+		core::Buffer stage_buffer{device,
+								  aligned_vertex_data.size() * sizeof(AlignedVertex),
+								  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+								  VMA_MEMORY_USAGE_CPU_ONLY};
+
+		stage_buffer.update(aligned_vertex_data.data(), aligned_vertex_data.size() * sizeof(AlignedVertex));
+
+		core::Buffer buffer{device,
+							aligned_vertex_data.size() * sizeof(AlignedVertex),
+							VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+							VMA_MEMORY_USAGE_GPU_ONLY};
+
+		command_buffer.copy_buffer(stage_buffer, buffer, aligned_vertex_data.size() * sizeof(AlignedVertex));
+
+		auto pair = std::make_pair("vertex_buffer", std::move(buffer));
+		submesh->vertex_buffers.insert(std::move(pair));
+
+		transient_buffers.push_back(std::move(stage_buffer));
+	}
+	else
+	{
+		for (size_t v = 0; v < vertex_count; v++)
+		{
+			Vertex vert{};
+			vert.pos    = glm::vec4(glm::make_vec3(&pos[v * 3]), 1.0f);
+			vert.normal = glm::normalize(glm::vec3(normals ? glm::make_vec3(&normals[v * 3]) : glm::vec3(0.0f)));
+			vert.uv     = uvs ? glm::make_vec2(&uvs[v * 2]) : glm::vec3(0.0f);
+
+			vert.joint0  = has_skin ? glm::vec4(glm::make_vec4(&joints[v * 4])) : glm::vec4(0.0f);
+			vert.weight0 = has_skin ? glm::make_vec4(&weights[v * 4]) : glm::vec4(0.0f);
+			vertex_data.push_back(vert);
+		}
+
+		{
+			core::Buffer stage_buffer{device,
+									  vertex_data.size() * sizeof(Vertex),
+									  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+									  VMA_MEMORY_USAGE_CPU_ONLY};
+
+			stage_buffer.update(vertex_data.data(), vertex_data.size() * sizeof(Vertex));
+
+			core::Buffer buffer{device,
+								vertex_data.size() * sizeof(Vertex),
+								VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+								VMA_MEMORY_USAGE_GPU_ONLY};
+
+			command_buffer.copy_buffer(stage_buffer, buffer, vertex_data.size() * sizeof(Vertex));
+
+			auto pair = std::make_pair("vertex_buffer", std::move(buffer));
+			submesh->vertex_buffers.insert(std::move(pair));
+
+			transient_buffers.push_back(std::move(stage_buffer));
+		}
 	}
 
-	core::Buffer stage_buffer{device,
-	                          vertex_data.size() * sizeof(Vertex),
-	                          VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-	                          VMA_MEMORY_USAGE_CPU_ONLY};
-
-	stage_buffer.update(vertex_data.data(), vertex_data.size() * sizeof(Vertex));
-
-	core::Buffer buffer{device,
-	                    vertex_data.size() * sizeof(Vertex),
-	                    VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-	                    VMA_MEMORY_USAGE_GPU_ONLY};
-
-	command_buffer.copy_buffer(stage_buffer, buffer, vertex_data.size() * sizeof(Vertex));
-
-	auto pair = std::make_pair("vertex_buffer", std::move(buffer));
-	submesh->vertex_buffers.insert(std::move(pair));
-
-	transient_buffers.push_back(std::move(stage_buffer));
 
 	if (gltf_primitive.indices >= 0)
 	{
@@ -1153,21 +1251,81 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::load_model(uint32_t index)
 		// Always do uint32
 		submesh->index_type = VK_INDEX_TYPE_UINT32;
 
-		core::Buffer stage_buffer{device,
-		                          index_data.size(),
-		                          VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		                          VMA_MEMORY_USAGE_CPU_ONLY};
+		if (mesh_shader_buffer)
+		{
+			// prepare meshlets
+			std::vector<Meshlet> meshlets = prepare_meshlets(submesh, index_data);
 
-		stage_buffer.update(index_data);
+			// vertex_indices and index_buffer are used for meshlets now
+			submesh->vertex_indices = vkb::to_u32(meshlets.size());
 
-		submesh->index_buffer = std::make_unique<core::Buffer>(device,
-		                                                       index_data.size(),
-		                                                       VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		                                                       VMA_MEMORY_USAGE_GPU_ONLY);
+			core::Buffer stage_buffer{device,
+									  meshlets.size() * sizeof(Meshlet),
+									  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+									  VMA_MEMORY_USAGE_CPU_ONLY};
 
-		command_buffer.copy_buffer(stage_buffer, *submesh->index_buffer, index_data.size());
+			stage_buffer.update(meshlets.data(), meshlets.size() * sizeof(Meshlet));
 
-		transient_buffers.push_back(std::move(stage_buffer));
+			submesh->index_buffer = std::make_unique<core::Buffer>(device,
+																   meshlets.size() * sizeof(Meshlet),
+																   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+																   VMA_MEMORY_USAGE_GPU_ONLY);
+
+			command_buffer.copy_buffer(stage_buffer, *submesh->index_buffer, meshlets.size() * sizeof(Meshlet));
+
+			transient_buffers.push_back(std::move(stage_buffer));
+		}
+		else
+		{
+			{
+				core::Buffer stage_buffer{device,
+										  index_data.size(),
+										  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+										  VMA_MEMORY_USAGE_CPU_ONLY};
+
+				stage_buffer.update(index_data);
+
+				submesh->index_buffer = std::make_unique<core::Buffer>(device,
+																	   index_data.size(),
+																	   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+																	   VMA_MEMORY_USAGE_GPU_ONLY);
+
+				command_buffer.copy_buffer(stage_buffer, *submesh->index_buffer, index_data.size());
+
+				transient_buffers.push_back(std::move(stage_buffer));
+			}
+
+			if (add_flat_vertices)
+			{
+				auto index_data_u32_ptr = reinterpret_cast<const uint32_t*>(index_data.data());
+				const auto num_indexes = index_data.size() / sizeof(uint32_t);
+
+				for (uint32_t i = 0; i < num_indexes; ++i)
+				{
+					const auto index = index_data_u32_ptr[i];
+					flat_vertex_data.push_back(vertex_data.at(index));
+				}
+
+				core::Buffer stage_buffer{device,
+										  flat_vertex_data.size() * sizeof(Vertex),
+										  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+										  VMA_MEMORY_USAGE_CPU_ONLY};
+
+				stage_buffer.update(flat_vertex_data.data(), flat_vertex_data.size() * sizeof(Vertex));
+
+				core::Buffer buffer{device,
+									flat_vertex_data.size() * sizeof(Vertex),
+									VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+									VMA_MEMORY_USAGE_GPU_ONLY};
+
+				command_buffer.copy_buffer(stage_buffer, buffer, flat_vertex_data.size() * sizeof(Vertex));
+
+				auto pair = std::make_pair("flat_vertex_buffer", std::move(buffer));
+				submesh->vertex_buffers.insert(std::move(pair));
+
+				transient_buffers.push_back(std::move(stage_buffer));
+			}
+		}
 	}
 
 	command_buffer.end();

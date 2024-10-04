@@ -1,4 +1,5 @@
 /* Copyright (c) 2019-2023, Sascha Willems
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -71,6 +72,27 @@ struct Vertex
 	glm::vec2 uv;
 	glm::vec4 joint0;
 	glm::vec4 weight0;
+};
+
+/**
+ * @brief The structure of a vertex for storage buffer
+ * Simplified to position and normal for easier alignment
+ */
+struct AlignedVertex
+{
+	glm::vec4 pos;
+	glm::vec4 normal;
+};
+
+/**
+ * @brief The structure of a meshlet for mesh shader
+ */
+struct Meshlet
+{
+	uint32_t unique_indices[64];
+	uint32_t primitive_indices[126 * 3];
+	uint32_t unique_index_count;
+	uint32_t primitive_index_count;
 };
 
 /**
@@ -159,7 +181,7 @@ class ApiVulkanSample : public vkb::VulkanSample
 	std::vector<VkFence> wait_fences;
 
 	/**
-	 * @brief Populates the swapchain_buffers vector with the image and imageviews 
+	 * @brief Populates the swapchain_buffers vector with the image and imageviews
 	 */
 	void create_swapchain_buffers();
 
@@ -215,7 +237,7 @@ class ApiVulkanSample : public vkb::VulkanSample
 	 * @param file The filename of the model to load
 	 * @param index The index of the model to load from the GLTF file (default: 0)
 	 */
-	std::unique_ptr<vkb::sg::SubMesh> load_model(const std::string &file, uint32_t index = 0);
+	std::unique_ptr<vkb::sg::SubMesh> load_model(const std::string &file, uint32_t index = 0, bool mesh_shader_buffer = false);
 
 	/**
 	 * @brief Records the necessary drawing commands to a command buffer
@@ -312,7 +334,7 @@ class ApiVulkanSample : public vkb::VulkanSample
 	VkPipelineShaderStageCreateInfo load_shader(const std::string &file, VkShaderStageFlagBits stage);
 
 	/**
-	 * @brief Updates the overlay 
+	 * @brief Updates the overlay
 	 * @param delta_time The time taken since the last frame
 	 */
 	void update_overlay(float delta_time);
@@ -324,7 +346,7 @@ class ApiVulkanSample : public vkb::VulkanSample
 	void draw_ui(const VkCommandBuffer command_buffer);
 
 	/**
-	 * @brief Prepare the frame for workload submission, acquires the next image from the swap chain and 
+	 * @brief Prepare the frame for workload submission, acquires the next image from the swap chain and
 	 *        sets the default wait and signal semaphores
 	 */
 	void prepare_frame();

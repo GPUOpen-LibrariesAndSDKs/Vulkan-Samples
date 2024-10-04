@@ -1,4 +1,5 @@
 /* Copyright (c) 2019-2022, Arm Limited and Contributors
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -124,6 +125,9 @@ class Platform
 	T *get_plugin() const;
 
 	template <class T>
+	T *get_plugin_2() const;
+
+	template <class T>
 	bool using_plugin() const;
 
 	void set_focus(bool focused);
@@ -211,4 +215,21 @@ T *Platform::get_plugin() const
 	const auto plugins = plugins::with_tags<T>(active_plugins);
 	return dynamic_cast<T *>(plugins[0]);
 }
+
+// With VS 2022 MSVC, somehow the other function is bugged in Release build...
+template <class T>
+T *Platform::get_plugin_2() const
+{
+	for (auto& plugin : active_plugins)
+	{
+		auto ptr = dynamic_cast<T *>(plugin);
+		if (ptr != nullptr)
+		{
+			return ptr;
+		}
+	}
+
+	return nullptr;
+}
+
 }        // namespace vkb

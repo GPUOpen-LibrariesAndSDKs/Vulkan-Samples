@@ -1,4 +1,4 @@
-//  Copyright (c) 2023 Advanced Micro Devices, Inc. All Rights Reserved.
+//  Copyright (c) 2023-2024 Advanced Micro Devices, Inc. All Rights Reserved.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -49,19 +49,24 @@
 #include "platform/platform.h"
 #include "scene_graph/components/sub_mesh.h"
 #include "scene_graph/components/image.h"
+#include "benchmark_mode/benchmark_mode.h"
+#include "stop_after/stop_after.h"
 
 #include <bitset>
 #include <set>
 #include <unordered_map>
 
+namespace
+{
+
 // Entrypoints of VK_AMDX_shader_enqueue
-static PFN_vkCreateExecutionGraphPipelinesAMDX			vkCreateExecutionGraphPipelinesAMDX;
-static PFN_vkGetExecutionGraphPipelineScratchSizeAMDX	vkGetExecutionGraphPipelineScratchSizeAMDX;
-static PFN_vkGetExecutionGraphPipelineNodeIndexAMDX      vkGetExecutionGraphPipelineNodeIndexAMDX;
-static PFN_vkCmdInitializeGraphScratchMemoryAMDX			vkCmdInitializeGraphScratchMemoryAMDX;
-static PFN_vkCmdDispatchGraphAMDX						vkCmdDispatchGraphAMDX;
-static PFN_vkCmdDispatchGraphIndirectAMDX                vkCmdDispatchGraphIndirectAMDX;
-static PFN_vkCmdDispatchGraphIndirectCountAMDX           vkCmdDispatchGraphIndirectCountAMDX;
+static PFN_vkCreateExecutionGraphPipelinesAMDX          vkCreateExecutionGraphPipelinesAMDX;
+static PFN_vkGetExecutionGraphPipelineScratchSizeAMDX   vkGetExecutionGraphPipelineScratchSizeAMDX;
+static PFN_vkGetExecutionGraphPipelineNodeIndexAMDX     vkGetExecutionGraphPipelineNodeIndexAMDX;
+static PFN_vkCmdInitializeGraphScratchMemoryAMDX        vkCmdInitializeGraphScratchMemoryAMDX;
+static PFN_vkCmdDispatchGraphAMDX                       vkCmdDispatchGraphAMDX;
+static PFN_vkCmdDispatchGraphIndirectAMDX               vkCmdDispatchGraphIndirectAMDX;
+static PFN_vkCmdDispatchGraphIndirectCountAMDX          vkCmdDispatchGraphIndirectCountAMDX;
 
 struct Vertex
 {
@@ -94,8 +99,8 @@ static void load_extension_function_pointers(VkDevice device)
     vkGetExecutionGraphPipelineNodeIndexAMDX   = (PFN_vkGetExecutionGraphPipelineNodeIndexAMDX)  vkGetDeviceProcAddr(device, "vkGetExecutionGraphPipelineNodeIndexAMDX");
     vkCmdInitializeGraphScratchMemoryAMDX      = (PFN_vkCmdInitializeGraphScratchMemoryAMDX)     vkGetDeviceProcAddr(device, "vkCmdInitializeGraphScratchMemoryAMDX");
     vkCmdDispatchGraphAMDX                     = (PFN_vkCmdDispatchGraphAMDX)                    vkGetDeviceProcAddr(device, "vkCmdDispatchGraphAMDX");
-    vkCmdDispatchGraphIndirectAMDX             = (PFN_vkCmdDispatchGraphIndirectAMDX)            vkGetDeviceProcAddr(device, "PFN_vkCmdDispatchGraphIndirectAMDX");
-    vkCmdDispatchGraphIndirectCountAMDX        = (PFN_vkCmdDispatchGraphIndirectCountAMDX)       vkGetDeviceProcAddr(device, "PFN_vkCmdDispatchGraphIndirectCountAMDX");
+    vkCmdDispatchGraphIndirectAMDX             = (PFN_vkCmdDispatchGraphIndirectAMDX)            vkGetDeviceProcAddr(device, "vkCmdDispatchGraphIndirectAMDX");
+    vkCmdDispatchGraphIndirectCountAMDX        = (PFN_vkCmdDispatchGraphIndirectCountAMDX)       vkGetDeviceProcAddr(device, "vkCmdDispatchGraphIndirectCountAMDX");
 }
 
 /// Scans the specified bit-mask for the most-significant '1' bit.
@@ -118,6 +123,8 @@ static bool bitmask_scan_reverse(
     }
     return result;
 }
+
+}   // anonymous ns
 
 GpuDispatch::GpuDispatch()
 {
@@ -276,15 +283,7 @@ void GpuDispatch::input_event(const vkb::InputEvent &input_event)
 
 void GpuDispatch::draw_gui()
 {
-    if (scene == SCENE_SANITY_CHECK)
-    {
-        gui->show_options_window(
-            /* body = */ [this]() {
-                ImGui::Text(use_hlsl_shaders ? "[HLSL]" : "[GLSL]");
-            },
-            /* lines = */ 1);
-    }
-    else
+    if (scene != SCENE_SANITY_CHECK)
     {
         gui->show_options_window(
             /* body = */ [this]() {
@@ -294,12 +293,11 @@ void GpuDispatch::draw_gui()
 
                     const auto bits_string = std::bitset<MaxBits>(highlighted_shader_permutation).to_string().substr(MaxBits - num_material_bits);
 
-                    ImGui::Text(use_hlsl_shaders ? "[HLSL]" : "[GLSL]");
                     ImGui::SameLine();
 
                     if (highlighted_shader_permutation == ShaderPermutationNone)
                     {
-                        ImGui::Text("Highlighted shader: none");
+                        ImGui::Text("%s", "Highlighted shader: none");
                     }
                     else
                     {
@@ -394,6 +392,29 @@ bool GpuDispatch::prepare(vkb::Platform &platform)
         return false;
     }
 
+    for (auto& arg : platform.get_arguments())
+    {
+        // platform.using_plugin<>() seems bugged in release mode
+        if (arg == "--benchmark")
+        {
+            is_benchmarking = true;
+        }
+        else if (arg.substr(0, 12) == "--stop-after")
+        {
+            is_stop_after = true;
+        }
+    }
+
+    // Keep these plugins disabled initially; we don't want to measure the resource loading time
+    if (is_benchmarking)
+    {
+        platform.get_plugin_2<::plugins::BenchmarkMode>()->set_enabled(false);
+    }
+    if (is_stop_after)
+    {
+        platform.get_plugin_2<::plugins::StopAfter>()->set_enabled(false);
+    }
+
     // Handle command line options
     for (auto& arg : platform.get_generic_options())
     {
@@ -452,6 +473,10 @@ bool GpuDispatch::prepare(vkb::Platform &platform)
         {
             graph_type = ENQUEUE_GRAPH_TYPE_AGGREGATION;
         }
+        else if (arg == "graph_thread")
+        {
+            graph_type = ENQUEUE_GRAPH_TYPE_THREAD;
+        }
         else if (arg.rfind("materials_", 0) == 0)
         {
             // Format: materials_X
@@ -509,24 +534,25 @@ bool GpuDispatch::prepare(vkb::Platform &platform)
             always_reset_scratch_buffer = true;
             reset_scratch_buffer_inline = true;
         }
-        else if (arg == "glsl")
-        {
-            // This is the default, but add it so that it's recognized
-            use_hlsl_shaders = false;
-        }
-        else if (arg == "hlsl")
-        {
-            use_hlsl_shaders = true;
-        }
         else
         {
             LOGE("Unrecognized option argument: {}", arg);
         }
     }
 
+    if ((scene != SCENE_TEAPOT) && (scene != SCENE_MONKEYS) && (graph_type == ENQUEUE_GRAPH_TYPE_THREAD))
+    {
+        LOGE("Unsupported scene for thread launch mode");
+
+        throw std::runtime_error("Unsupported");
+    }
+
     load_extension_function_pointers(device->get_handle());
 
-    gui = std::make_unique<vkb::Gui>(*this, platform.get_window(), nullptr, 15.0f, true);
+    if (!is_benchmarking)
+    {
+        gui = std::make_unique<vkb::Gui>(*this, platform.get_window(), nullptr, 15.0f, true);
+    }
 
     textures.clear();
 
@@ -779,6 +805,7 @@ void GpuDispatch::prepare_resources()
 
     VK_CHECK(vkResetDescriptorPool(device->get_handle(), descriptor_pool, 0));
 
+    if (gui)
     {
         std::vector<VkPipelineShaderStageCreateInfo> shader_stages;
 
@@ -968,16 +995,8 @@ void GpuDispatch::prepare_resources()
 
             if (is_material_map_scene())
             {
-                if (use_hlsl_shaders)
-                {
-                    shader_stages[0] = load_spv_shader("gpu_dispatch/hlsl/spv/geometry_material_map_vs.spv", VK_SHADER_STAGE_VERTEX_BIT);
-                    shader_stages[1] = load_spv_shader("gpu_dispatch/hlsl/spv/geometry_material_map_ps.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-                }
-                else
-                {
-                    shader_stages[0] = load_shader("gpu_dispatch/glsl/geometry_material_map.vert", VK_SHADER_STAGE_VERTEX_BIT);
-                    shader_stages[1] = load_shader("gpu_dispatch/glsl/geometry_material_map.frag", VK_SHADER_STAGE_FRAGMENT_BIT);
-                }
+                shader_stages[0] = load_spv_shader("gpu_dispatch/spv/geometry_material_map_vs.spv", VK_SHADER_STAGE_VERTEX_BIT);
+                shader_stages[1] = load_spv_shader("gpu_dispatch/spv/geometry_material_map_ps.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
                 // Draws a fullscreen quad instead of a proper model
                 vertex_input_state.vertexAttributeDescriptionCount = 0;
@@ -987,16 +1006,8 @@ void GpuDispatch::prepare_resources()
             }
             else
             {
-                if (use_hlsl_shaders)
-                {
-                    shader_stages[0] = load_spv_shader("gpu_dispatch/hlsl/spv/geometry_vs.spv", VK_SHADER_STAGE_VERTEX_BIT);
-                    shader_stages[1] = load_spv_shader("gpu_dispatch/hlsl/spv/geometry_ps.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-                }
-                else
-                {
-                    shader_stages[0] = load_shader("gpu_dispatch/glsl/geometry.vert", VK_SHADER_STAGE_VERTEX_BIT);
-                    shader_stages[1] = load_shader("gpu_dispatch/glsl/geometry.frag", VK_SHADER_STAGE_FRAGMENT_BIT);
-                }
+                shader_stages[0] = load_spv_shader("gpu_dispatch/spv/geometry_vs.spv", VK_SHADER_STAGE_VERTEX_BIT);
+                shader_stages[1] = load_spv_shader("gpu_dispatch/spv/geometry_ps.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
                 shader_stages[1].pSpecializationInfo = &specialization_info;
             }
@@ -1101,50 +1112,22 @@ void GpuDispatch::prepare_resources()
 
             int i = 0;
 
-            if (use_hlsl_shaders)
-            {
-                all_shader_stages[i] = load_spv_shader("gpu_dispatch/hlsl/spv/sanity_entry_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
-            else
-            {
-                all_shader_stages[i] = load_shader("gpu_dispatch/glsl/sanity_entry.comp", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
+            all_shader_stages[i] = load_spv_shader("gpu_dispatch/spv/sanity_entry_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
             all_shader_stages[i].pNext = &node_info[i];
             node_info[i].pName = "main";
             ++i;
 
-            if (use_hlsl_shaders)
-            {
-                all_shader_stages[i] = load_spv_shader("gpu_dispatch/hlsl/spv/sanity_fixed_exp_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
-            else
-            {
-                all_shader_stages[i] = load_shader("gpu_dispatch/glsl/sanity_fixed_exp.comp", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
+            all_shader_stages[i] = load_spv_shader("gpu_dispatch/spv/sanity_fixed_exp_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
             all_shader_stages[i].pNext = &node_info[i];
             node_info[i].pName = "fixed_exp";
             ++i;
 
-            if (use_hlsl_shaders)
-            {
-                all_shader_stages[i] = load_spv_shader("gpu_dispatch/hlsl/spv/sanity_dynamic_exp_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
-            else
-            {
-                all_shader_stages[i] = load_shader("gpu_dispatch/glsl/sanity_dynamic_exp.comp", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
+            all_shader_stages[i] = load_spv_shader("gpu_dispatch/spv/sanity_dynamic_exp_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
             all_shader_stages[i].pNext = &node_info[i];
             node_info[i].pName = "dynamic_exp";
             ++i;
 
-            if (use_hlsl_shaders)
-            {
-                all_shader_stages[i] = load_spv_shader("gpu_dispatch/hlsl/spv/sanity_aggregation_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
-            else
-            {
-                all_shader_stages[i] = load_shader("gpu_dispatch/glsl/sanity_aggregation.comp", VK_SHADER_STAGE_COMPUTE_BIT);
-            }
+            all_shader_stages[i] = load_spv_shader("gpu_dispatch/spv/sanity_aggregation_cs.spv", VK_SHADER_STAGE_COMPUTE_BIT);
             all_shader_stages[i].pNext = &node_info[i];
             node_info[i].pName = "aggregation";
             ++i;
@@ -1167,6 +1150,11 @@ void GpuDispatch::prepare_resources()
             {
                 variant.add_define("NODE_AGGREGATION");
                 hlslSuffix = "a";
+            }
+            else if (graph_type == ENQUEUE_GRAPH_TYPE_THREAD)
+            {
+                variant.add_define("NODE_THREAD");
+                hlslSuffix = "t";
             }
             else
             {
@@ -1207,26 +1195,26 @@ void GpuDispatch::prepare_resources()
 
             VkPipelineShaderStageCreateInfo shader_stage = {};
 
-            if (use_hlsl_shaders)
             {
-                std::ostringstream shader_name_stream;
+                std::ostringstream str;
                 if (is_material_map_scene())
                 {
-                    shader_name_stream << "gpu_dispatch/hlsl/spv/classify_material_map_gpu_enqueue_cs_" << hlslSuffix << ".spv";
+                    str << "gpu_dispatch/spv/classify_material_map_gpu_enqueue_cs_" << hlslSuffix << ".spv";
                 }
                 else
                 {
-                    shader_name_stream << "gpu_dispatch/hlsl/spv/classify_gpu_enqueue_cs_" << hlslSuffix << ".spv";
-                }
-                shader_stage = load_spv_shader(shader_name_stream.str(), VK_SHADER_STAGE_COMPUTE_BIT);
-            }
-            else
-            {
-                std::string shader_name = is_material_map_scene() ? "gpu_dispatch/glsl/classify_material_map_gpu_enqueue.comp"
-                                                                  : "gpu_dispatch/glsl/classify_gpu_enqueue.comp";
-                shader_stage = load_shader(shader_name, VK_SHADER_STAGE_COMPUTE_BIT, variant);
-            }
+                    std::string hlslSuffix2 = hlslSuffix;
 
+                    if (graph_type == ENQUEUE_GRAPH_TYPE_THREAD)
+                    {
+                        // Thread uses the same shader on the classify side as aggregation.
+                        hlslSuffix2 = "a";
+                    }
+
+                    str << "gpu_dispatch/spv/classify_gpu_enqueue_cs_" << hlslSuffix2 << ".spv";
+                }
+                shader_stage = load_spv_shader(str.str(), VK_SHADER_STAGE_COMPUTE_BIT);
+            }
             {
                 shader_stage.pSpecializationInfo = &specialization_info[0];
 
@@ -1246,24 +1234,17 @@ void GpuDispatch::prepare_resources()
             }
 
             std::string shader_name;
-
-            if (use_hlsl_shaders)
             {
-                std::ostringstream shader_name_stream;
+                std::ostringstream str;
                 if (is_material_map_scene())
                 {
-                    shader_name_stream << "gpu_dispatch/hlsl/spv/compose_material_map_gpu_enqueue_cs_" << hlslSuffix << ".spv";
+                    str << "gpu_dispatch/spv/compose_material_map_gpu_enqueue_cs_" << hlslSuffix << ".spv";
                 }
                 else
                 {
-                    shader_name_stream << "gpu_dispatch/hlsl/spv/compose_gpu_enqueue_cs_" << hlslSuffix << ".spv";
+                    str << "gpu_dispatch/spv/compose_gpu_enqueue_cs_" << hlslSuffix << ".spv";
                 }
-                shader_name = shader_name_stream.str();
-            }
-            else
-            {
-                shader_name = is_material_map_scene() ? "gpu_dispatch/glsl/compose_material_map_gpu_enqueue.comp"
-                                                      : "gpu_dispatch/glsl/compose_gpu_enqueue.comp";
+                shader_name = str.str();
             }
 
             // Compose shaders
@@ -1286,17 +1267,8 @@ void GpuDispatch::prepare_resources()
                     sizeof(SpecData),
                     &specialization_data[permutation_ndx]);
 
-                if (use_hlsl_shaders)
-                {
-                    shader_stage = load_spv_shader(shader_name, VK_SHADER_STAGE_COMPUTE_BIT);
-                }
-                else
-                {
-                    shader_stage = load_shader(shader_name, VK_SHADER_STAGE_COMPUTE_BIT, variant);
-                }
-
+                shader_stage = load_spv_shader(shader_name, VK_SHADER_STAGE_COMPUTE_BIT);
                 shader_stage.pSpecializationInfo = &specialization_info[permutation_ndx];
-
                 shader_stage.pNext = &node_info[permutation_ndx];
 
                 node_info[permutation_ndx].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NODE_CREATE_INFO_AMDX;
@@ -1337,7 +1309,7 @@ void GpuDispatch::prepare_resources()
 
             VK_CHECK(vkGetExecutionGraphPipelineScratchSizeAMDX(device->get_handle(), classify_and_compose_pipeline, &enqueue_scratch_buffer_size));
 
-            LOGI("Using scratch buffer size = {}", enqueue_scratch_buffer_size.size);
+            LOGI("Using scratch buffer size = {}", enqueue_scratch_buffer_size.maxSize);
         }
     }
 
@@ -1349,6 +1321,7 @@ void GpuDispatch::prepare_resources()
 
         frame_data.enqueue_scratch_buffer_ready = false;
 
+        if (gui)
         {
             auto image_view = rt.get_views().at(MRT_SWAPCHAIN).get_handle();
 
@@ -1517,11 +1490,11 @@ void GpuDispatch::prepare_resources()
         }
 
         {
-            if (enqueue_scratch_buffer_size.size != 0)
+            if (enqueue_scratch_buffer_size.maxSize != 0)
             {
                 frame_data.enqueue_scratch_buffer = std::make_unique<vkb::core::Buffer>(
                     *device,
-                    enqueue_scratch_buffer_size.size,
+                    enqueue_scratch_buffer_size.maxSize,
                     VK_BUFFER_USAGE_EXECUTION_GRAPH_SCRATCH_BIT_AMDX | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                     VMA_MEMORY_USAGE_GPU_ONLY,
                     0); // no VMA flags
@@ -1539,8 +1512,7 @@ void GpuDispatch::prepare_resources()
 
 VkPipelineShaderStageCreateInfo GpuDispatch::load_shader(
     const std::string&          file,
-    VkShaderStageFlagBits       stage,
-    const vkb::ShaderVariant&   variant)
+    VkShaderStageFlagBits       stage)
 {
     VkPipelineShaderStageCreateInfo shader_stage_create_info = {};
     shader_stage_create_info.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1550,7 +1522,7 @@ VkPipelineShaderStageCreateInfo GpuDispatch::load_shader(
     auto module_iter = shader_module_cache.find(file);
     if (module_iter == shader_module_cache.end())
     {
-        shader_stage_create_info.module = vkb::load_shader(file, device->get_handle(), stage, variant);
+        shader_stage_create_info.module = vkb::load_shader(file, device->get_handle(), stage);
         assert(shader_stage_create_info.module != VK_NULL_HANDLE);
 
         shader_module_cache.insert({file, shader_stage_create_info.module});
@@ -1705,8 +1677,24 @@ void GpuDispatch::update(float delta_time)
             }
         }
 
+        if (frame_count == 1)
+        {
+            // If we're benchmarking, start the measurement after the resources have been loaded.
+            if (is_benchmarking)
+            {
+                platform->get_plugin_2<::plugins::BenchmarkMode>()->set_enabled(true);
+            }
+            if (is_stop_after)
+            {
+                platform->get_plugin_2<::plugins::StopAfter>()->set_enabled(true);
+            }
+        }
+
         ++frame_count;
+
+        platform->on_post_draw(get_render_context());
     }
+
     // Don't call VulkanSample::update(), it depends on the RenderPipeline and Scene which we don't use.
 }
 
@@ -1908,8 +1896,10 @@ void GpuDispatch::record_scratch_buffer_reset(vkb::CommandBuffer& cmd_buf, PerFr
             0, nullptr);
     }
 
-    vkCmdBindPipeline(cmd_buf.get_handle(), VK_PIPELINE_BIND_POINT_EXECUTION_GRAPH_AMDX, classify_and_compose_pipeline);
-    vkCmdInitializeGraphScratchMemoryAMDX(cmd_buf.get_handle(), frame_data.enqueue_scratch_buffer->get_device_address());
+    vkCmdInitializeGraphScratchMemoryAMDX(cmd_buf.get_handle(),
+                                          classify_and_compose_pipeline,
+                                          frame_data.enqueue_scratch_buffer->get_device_address(),
+                                          enqueue_scratch_buffer_size.maxSize);
 
     {
         auto barrier = vkb::initializers::buffer_memory_barrier();
@@ -2166,7 +2156,10 @@ void GpuDispatch::record_active_frame_commands(vkb::CommandBuffer& cmd_buf, floa
             VK_CHECK(vkGetExecutionGraphPipelineNodeIndexAMDX(device->get_handle(), classify_and_compose_pipeline, &nodeInfo, &dispatch_info.nodeIndex));
 
             vkCmdBindPipeline(cmd_buf.get_handle(), VK_PIPELINE_BIND_POINT_EXECUTION_GRAPH_AMDX, classify_and_compose_pipeline);
-            vkCmdDispatchGraphAMDX(cmd_buf.get_handle(), frame_data.enqueue_scratch_buffer->get_device_address(), &dispatch_count_info);
+            vkCmdDispatchGraphAMDX(cmd_buf.get_handle(),
+                                   frame_data.enqueue_scratch_buffer->get_device_address(),
+                                   enqueue_scratch_buffer_size.maxSize,
+                                   &dispatch_count_info);
         }
         {
             // A barrier for the UI draw.

@@ -1,4 +1,5 @@
 /* Copyright (c) 2020-2021, Arm Limited and Contributors
+ * Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -21,17 +22,17 @@
 
 namespace plugins
 {
-using StopAfterTags = vkb::PluginBase<vkb::tags::Stopping>;
+class StopAfter;
+
+using StopAfterTags = vkb::PluginBase<StopAfter, vkb::tags::Stopping>;
 
 /**
  * @brief Stop After
- * 
+ *
  * Stop the execution of the app after a specific frame.
- * 
+ *
  * Usage: vulkan_sample sample afbc --stop-after-frame 100
- * 
- * TODO: Add stop after duration
- * 
+ *
  */
 class StopAfter : public StopAfterTags
 {
@@ -46,9 +47,18 @@ class StopAfter : public StopAfterTags
 
 	virtual void on_update(float delta_time) override;
 
+	void set_enabled(bool is_enabled);
+
 	vkb::FlagCommand stop_after_frame_flag = {vkb::FlagType::OneValue, "stop-after-frame", "", "Stop the application after a certain number of frames"};
+	vkb::FlagCommand stop_after_seconds_flag = {vkb::FlagType::OneValue, "stop-after-seconds", "", "Stop the application after elapsed time in seconds"};
 
   private:
+	bool enabled{false};
+
+	bool use_frames{false};
 	uint32_t remaining_frames{0};
+
+	bool use_time{false};
+	float remaining_time{0.0f};
 };
 }        // namespace plugins

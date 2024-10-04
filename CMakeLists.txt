@@ -1,4 +1,5 @@
 # Copyright (c) 2020-2023, Arm Limited and Contributors
+# Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -45,6 +46,10 @@ cmake_minimum_required(VERSION 3.16)
 add_compile_definitions($<$<CONFIG:DEBUG>:VKB_DEBUG>)
 
 project(vulkan_samples)
+
+if(MSVC)
+    add_compile_definitions(_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
+endif()
 
 # create output folder
 file(MAKE_DIRECTORY output)

@@ -1,4 +1,4 @@
-//  Copyright (c) 2023 Advanced Micro Devices, Inc. All Rights Reserved.
+//  Copyright (c) 2023-2024 Advanced Micro Devices, Inc. All Rights Reserved.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -69,6 +69,7 @@ protected:
         ENQUEUE_GRAPH_TYPE_FIXED_EXPANSION,                     // Use fixed expansion nodes
         ENQUEUE_GRAPH_TYPE_DYNAMIC_EXPANSION,                   // Use dynamic expansion nodes
         ENQUEUE_GRAPH_TYPE_AGGREGATION,                         // Use aggregation nodes to classify per pixel
+        ENQUEUE_GRAPH_TYPE_THREAD,                              // Use thread launch nodes to classify per pixel
     };
 
     const uint32_t   TileSize = 16;     // width/height of the compute workgroup used for tile classification
@@ -90,7 +91,6 @@ protected:
     bool             reset_scratch_buffer_inline      = false;
     bool             always_reset_scratch_buffer      = false;
     bool             deferred_clear_swapchain_image   = false;  // will clear the image before drawing into it
-    bool             use_hlsl_shaders                 = false;
     PresentMode      present_mode                     = PRESENT_MODE_DEFAULT;  // how to present frames
 
     vkb::Camera                                  camera;
@@ -103,6 +103,8 @@ protected:
     // Keep the compiled modules around, to avoid glslang recompilation on resizes, etc.
     std::unordered_map<std::string, VkShaderModule> shader_module_cache;
 
+    bool                                                    is_benchmarking             = false;
+    bool                                                    is_stop_after               = false;
     bool                                                    is_shader_enqueue_supported = false;
     VkPhysicalDeviceShaderEnqueuePropertiesAMDX              shader_enqueue_properties = {};
     VkExecutionGraphPipelineScratchSizeAMDX                  enqueue_scratch_buffer_size = {};
@@ -164,7 +166,7 @@ protected:
     std::unique_ptr<vkb::sg::SubMesh>   load_model(const std::string& file, uint32_t index = 0);
     std::unique_ptr<vkb::sg::Image>     load_image(const std::string& file);
     std::unique_ptr<vkb::sg::Image>     convert_material_id_color_image(const vkb::sg::Image& material_color, uint32_t* out_num_colors);
-    VkPipelineShaderStageCreateInfo     load_shader(const std::string& file, VkShaderStageFlagBits stage, const vkb::ShaderVariant& variant={});
+    VkPipelineShaderStageCreateInfo     load_shader(const std::string& file, VkShaderStageFlagBits stage);
     VkPipelineShaderStageCreateInfo     load_spv_shader(const std::string& file, VkShaderStageFlagBits stage);
     void                                draw_scene(vkb::CommandBuffer& cb, vkb::RenderTarget& rt, PerFrame& frame_data);
     void                                draw_model(std::unique_ptr<vkb::sg::SubMesh>& model, VkCommandBuffer cmd_buf);
