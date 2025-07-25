@@ -1,4 +1,5 @@
 /* Copyright (c) 2019-2021, Arm Limited and Contributors
+ * Copyright (c) 2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -44,7 +45,8 @@ class Buffer : public VulkanResource<VkBuffer, VK_OBJECT_TYPE_BUFFER, const Devi
 	       VkBufferUsageFlags           buffer_usage,
 	       VmaMemoryUsage               memory_usage,
 	       VmaAllocationCreateFlags     flags                = VMA_ALLOCATION_CREATE_MAPPED_BIT,
-	       const std::vector<uint32_t> &queue_family_indices = {});
+	       const std::vector<uint32_t> &queue_family_indices = {},
+	       const void                  *pNext = 0);
 
 	Buffer(const Buffer &) = delete;
 

@@ -1,4 +1,5 @@
 # Copyright (c) 2019-2023, Arm Limited and Contributors
+# Copyright (c) 2025 Advanced Micro Devices, Inc. All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -83,6 +84,7 @@ set(ORDER_LIST
     "fragment_shader_barycentric"
     "gpu_dispatch"
     "gpu_draw_dispatch"
+    "dense_geometry_format"
 
     #Performance Samples
     "swapchain_images"

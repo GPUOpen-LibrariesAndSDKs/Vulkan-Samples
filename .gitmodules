@@ -53,3 +53,6 @@
 [submodule "third_party/opencl"]
 	path = third_party/opencl
 	url = https://github.com/KhronosGroup/OpenCL-Headers.git
+[submodule "third_party/DGF-SDK"]
+	path = third_party/DGF-SDK
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/DGF-SDK.git

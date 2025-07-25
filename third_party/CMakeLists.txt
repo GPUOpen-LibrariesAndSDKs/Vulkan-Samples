@@ -1,4 +1,5 @@
 # Copyright (c) 2019-2023, Arm Limited and Contributors
+# Copyright (c) 2025 Advanced Micro Devices, Inc. All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -363,3 +364,6 @@ add_library(opencl INTERFACE)
 set(OPENCL_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/opencl)
 target_sources(opencl INTERFACE ${OPENCL_INCLUDE_DIR}/CL/opencl.h)
 target_include_directories(opencl INTERFACE ${OPENCL_INCLUDE_DIR})
+
+# DGFLib
+add_subdirectory(DGF-SDK/DGFLib)

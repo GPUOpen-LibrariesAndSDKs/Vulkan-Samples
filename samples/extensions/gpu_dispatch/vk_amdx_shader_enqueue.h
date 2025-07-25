@@ -109,13 +109,6 @@ typedef struct VkPipelineShaderStageNodeCreateInfoAMDX {
     uint32_t             index;
 } VkPipelineShaderStageNodeCreateInfoAMDX;
 
-typedef VkFlags64 VkPipelineCreateFlags2KHR;
-
-typedef struct VkPipelineCreateFlags2CreateInfoKHR {
-    VkStructureType              sType;
-    const void*                  pNext;
-    VkPipelineCreateFlags2KHR    flags;
-} VkPipelineCreateFlags2CreateInfoKHR;
 
 typedef VkResult (VKAPI_PTR *PFN_vkCreateExecutionGraphPipelinesAMDX)(VkDevice                                        device, VkPipelineCache                 pipelineCache, uint32_t                                        createInfoCount, const VkExecutionGraphPipelineCreateInfoAMDX* pCreateInfos, const VkAllocationCallbacks*    pAllocator, VkPipeline*               pPipelines);
 typedef VkResult (VKAPI_PTR *PFN_vkGetExecutionGraphPipelineScratchSizeAMDX)(VkDevice                                        device, VkPipeline                                      executionGraph, VkExecutionGraphPipelineScratchSizeAMDX*        pSizeInfo);

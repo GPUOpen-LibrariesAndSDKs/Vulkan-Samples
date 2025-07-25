@@ -1,5 +1,6 @@
 /* Copyright (c) 2019-2021, Arm Limited and Contributors
- *
+ * Copyright (c) 2025 Advanced Micro Devices, Inc. All Rights Reserved.
+ * 
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 the "License";
@@ -23,7 +24,7 @@ namespace vkb
 {
 namespace core
 {
-Buffer::Buffer(Device const &device, VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaMemoryUsage memory_usage, VmaAllocationCreateFlags flags, const std::vector<uint32_t> &queue_family_indices) :
+Buffer::Buffer(Device const &device, VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaMemoryUsage memory_usage, VmaAllocationCreateFlags flags, const std::vector<uint32_t> &queue_family_indices, const void *pNext) :
     VulkanResource{VK_NULL_HANDLE, &device},
     size{size}
 {
@@ -36,6 +37,7 @@ Buffer::Buffer(Device const &device, VkDeviceSize size, VkBufferUsageFlags buffe
 	persistent = (flags & VMA_ALLOCATION_CREATE_MAPPED_BIT) != 0;
 
 	VkBufferCreateInfo buffer_info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+	buffer_info.pNext = pNext;
 	buffer_info.usage = buffer_usage;
 	buffer_info.size  = size;
 	if (queue_family_indices.size() >= 2)

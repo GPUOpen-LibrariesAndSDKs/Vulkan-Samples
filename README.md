@@ -38,6 +38,19 @@ Navigate to the following paths to learn more:
   - [shaders/gpu_dispatch](./shaders/gpu_dispatch)
   - [shaders/gpu_draw_dispatch](./shaders/gpu_draw_dispatch)
 
+# Vulkan Dense Geometry Format sample <!-- omit in toc -->
+
+This branch adds a sample application for the `VK_AMDX_dense_geometry_format` extension that enables
+the use of pre-compressed Dense Geometry Format data to build acceleration structures.
+
+To build the sample, follow the standard build instructions.
+
+To run sample, execute with the arguments `sample dense_geometry_format`.
+
+Navigate to the following path to learn more:
+- Source code
+  - [samples/extensions/dense_geometry_format](./samples/extensions/dense_geometry_format)
+
 # Vulkan Samples <!-- omit in toc -->
 
 ![Vulkan Samples banner](banner.jpg)
